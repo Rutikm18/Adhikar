@@ -6,6 +6,8 @@ Adhikar is a Data Principal Request (DPR) triage console for privacy operations 
 
 This project **demonstrates controls aligned to DPDP obligations**. It does not make an organisation compliant, replace legal advice, or automate identity verification.
 
+New to the project? Follow the complete [step-by-step run guide](RUN_PROJECT_GUIDE.md).
+
 ## Project overview
 
 Privacy teams at banks, healthtechs, insurers, and marketplaces often receive access, correction, erasure, grievance, and nomination requests in a shared inbox. The request includes personal data and is also attacker-controlled. Sending it directly to a language model creates two simultaneous risks: disclosing identifiers to a processor and obeying hostile instructions embedded in the request.
@@ -49,10 +51,10 @@ cp .env.example .env
 make demo
 ```
 
-Open [http://127.0.0.1:8000](http://127.0.0.1:8000). First-run terminal output should include:
+Open [http://127.0.0.1:8018](http://127.0.0.1:8018). First-run terminal output should include:
 
 ```text
-Uvicorn running on http://127.0.0.1:8000
+Uvicorn running on http://127.0.0.1:8018
 Application startup complete.
 ```
 
@@ -86,7 +88,7 @@ python3 evals/run_evals.py
 Example API request:
 
 ```bash
-curl -s http://127.0.0.1:8000/api/requests \
+curl -s http://127.0.0.1:8018/api/requests \
   -H 'content-type: application/json' \
   -d '{
     "text": "Please provide the data linked to account ZX-00000001 and contact nova.quill@example.in.",
