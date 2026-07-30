@@ -1,0 +1,2 @@
+"""Adhikar DPR triage console."""
+

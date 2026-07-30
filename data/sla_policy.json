@@ -1,0 +1,12 @@
+{
+  "version": "sla_policy@1",
+  "rights": {
+    "ACCESS": {"days": 30, "basis": "organisation policy"},
+    "CORRECTION": {"days": 30, "basis": "organisation policy"},
+    "ERASURE": {"days": 30, "basis": "organisation policy"},
+    "GRIEVANCE": {"days": 15, "basis": "published grievance redressal period"},
+    "NOMINATION": {"days": 30, "basis": "organisation policy"},
+    "UNCLEAR": {"days": 7, "basis": "internal triage target"}
+  }
+}
+

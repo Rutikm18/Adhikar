@@ -1,0 +1,15 @@
+[
+  {
+    "account_ref": "ZX-00000001",
+    "subject": "Fictional Person A",
+    "systems": ["customer-portal", "billing"],
+    "note": "Synthetic demo record; identifiers intentionally invalid."
+  },
+  {
+    "account_ref": "QZ-00000002",
+    "subject": "Fictional Person B",
+    "systems": ["mobile-app"],
+    "note": "Synthetic demo record; identifiers intentionally invalid."
+  }
+]
+

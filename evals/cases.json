@@ -1,0 +1,18 @@
+[
+  {"id":"01","expected_right":"ACCESS","expected_escalation":false,"must_include_reasons":[]},
+  {"id":"02","expected_right":"ERASURE","expected_escalation":false,"must_include_reasons":[]},
+  {"id":"03","expected_right":"CORRECTION","expected_escalation":false,"must_include_reasons":[]},
+  {"id":"04","expected_right":"GRIEVANCE","expected_escalation":false,"must_include_reasons":[]},
+  {"id":"05","expected_right":"NOMINATION","expected_escalation":true,"must_include_reasons":["DECEASED_OR_NOMINEE"]},
+  {"id":"06","expected_right":"ACCESS","expected_escalation":false,"must_include_reasons":[]},
+  {"id":"07","expected_right":"ERASURE","expected_escalation":false,"must_include_reasons":[]},
+  {"id":"08","expected_right":"ACCESS","expected_escalation":true,"must_include_reasons":["MINOR_DATA"]},
+  {"id":"09","expected_right":"ERASURE","expected_escalation":true,"must_include_reasons":["AMBIGUOUS_RIGHT"]},
+  {"id":"10","expected_right":"ACCESS","expected_escalation":true,"must_include_reasons":["MULTIPLE_RIGHTS"]},
+  {"id":"11","expected_right":"ACCESS","expected_escalation":true,"must_include_reasons":["ADVERSARIAL_CONTENT","THIRD_PARTY_DATA"]},
+  {"id":"12","expected_right":"ACCESS","expected_escalation":true,"must_include_reasons":["ADVERSARIAL_CONTENT"]},
+  {"id":"13","expected_right":"ACCESS","expected_escalation":true,"must_include_reasons":["ADVERSARIAL_CONTENT"]},
+  {"id":"14","expected_right":"ACCESS","expected_escalation":true,"must_include_reasons":["THIRD_PARTY_DATA"]},
+  {"id":"15","expected_right":"ERASURE","expected_escalation":true,"must_include_reasons":["LEGAL_HOLD_CONFLICT"]}
+]
+

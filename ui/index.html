@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Adhikar · DPR Triage</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #080b0e;
+      --panel: #11161b;
+      --panel-2: #171e24;
+      --line: #27323b;
+      --muted: #8c9aa5;
+      --text: #eaf0f3;
+      --teal: #47e5b5;
+      --teal-dim: #103b32;
+      --amber: #ffbf69;
+      --red: #ff5d6c;
+      --red-dim: #451920;
+      --blue: #6aa8ff;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; color: var(--text);
+      background:
+        radial-gradient(circle at 85% -10%, rgba(71,229,181,.10), transparent 34%),
+        var(--bg);
+      font: 14px/1.45 Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+    }
+    button, textarea, select, input { font: inherit; }
+    .shell { min-height: 100vh; display: grid; grid-template-rows: 68px 1fr 40px; }
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 26px; border-bottom: 1px solid var(--line);
+      background: rgba(8,11,14,.82); backdrop-filter: blur(14px);
+    }
+    .brand { display: flex; align-items: center; gap: 13px; }
+    .mark {
+      width: 36px; height: 36px; display: grid; place-items: center;
+      border: 1px solid #3c7567; border-radius: 10px; color: var(--teal);
+      background: linear-gradient(145deg, #153b33, #0b1917);
+      font: 700 19px/1 ui-monospace, monospace;
+    }
+    .brand h1 { margin: 0; font-size: 16px; letter-spacing: .04em; }
+    .brand p { margin: 1px 0 0; color: var(--muted); font-size: 12px; }
+    .top-badges, .footer-badges { display: flex; gap: 8px; align-items: center; }
+    .badge {
+      border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px;
+      color: #bcc7cd; background: #10151a; font-size: 11px; letter-spacing: .02em;
+    }
+    .badge.good { color: var(--teal); border-color: #285849; background: #0d231e; }
+    main { display: grid; grid-template-columns: minmax(330px, 38%) 1fr; min-height: 0; }
+    .input-side { border-right: 1px solid var(--line); padding: 22px; overflow: auto; }
+    .result-side { padding: 22px; overflow: auto; }
+    .section-label {
+      color: var(--muted); font-size: 10px; font-weight: 700;
+      letter-spacing: .15em; text-transform: uppercase; margin-bottom: 9px;
+    }
+    .card {
+      background: linear-gradient(155deg, rgba(23,30,36,.96), rgba(15,20,24,.96));
+      border: 1px solid var(--line); border-radius: var(--radius); padding: 16px;
+      box-shadow: 0 14px 50px rgba(0,0,0,.16);
+    }
+    .stack { display: grid; gap: 14px; }
+    textarea {
+      width: 100%; min-height: 245px; resize: vertical; color: var(--text);
+      background: #0a0e12; border: 1px solid #303b44; border-radius: 10px;
+      padding: 14px; outline: none;
+    }
+    textarea:focus, select:focus { border-color: #3c9a80; box-shadow: 0 0 0 3px #153a31; }
+    select {
+      width: 100%; color: var(--text); background: #0a0e12; border: 1px solid #303b44;
+      border-radius: 9px; padding: 9px 10px; outline: none;
+    }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .control label { display: block; color: #bdc8ce; font-size: 12px; margin-bottom: 6px; }
+    .modes { display: grid; gap: 7px; }
+    .mode {
+      display: flex; gap: 9px; align-items: flex-start; cursor: pointer;
+      border: 1px solid var(--line); border-radius: 9px; padding: 9px;
+      background: #0e1317;
+    }
+    .mode:has(input:checked) { border-color: #397a68; background: #10251f; }
+    .mode input { accent-color: var(--teal); margin-top: 2px; }
+    .mode b { display: block; font-size: 12px; }
+    .mode span { display: block; color: var(--muted); font-size: 10px; }
+    .checks { display: flex; gap: 16px; color: #bdc8ce; font-size: 12px; }
+    .checks input { accent-color: var(--teal); }
+    .primary {
+      border: 0; border-radius: 10px; padding: 11px 16px; cursor: pointer;
+      color: #06110e; font-weight: 750; background: var(--teal);
+      box-shadow: 0 8px 26px rgba(71,229,181,.14);
+    }
+    .primary:hover { filter: brightness(1.08); }
+    .primary:disabled { opacity: .5; cursor: wait; }
+    .secondary {
+      border: 1px solid var(--line); border-radius: 9px; padding: 8px 12px;
+      color: var(--text); background: #151b20; cursor: pointer;
+    }
+    .queue { margin-top: 17px; }
+    .queue-list { display: grid; gap: 7px; }
+    .queue-item {
+      border: 1px solid var(--line); background: #0d1216; border-radius: 9px;
+      padding: 10px; cursor: pointer; display: flex; justify-content: space-between; gap: 8px;
+    }
+    .queue-item:hover { border-color: #3b4a54; }
+    .queue-id { color: #c9d2d7; font: 11px ui-monospace, monospace; }
+    .queue-right { color: var(--muted); font-size: 10px; }
+    .empty {
+      min-height: calc(100vh - 152px); display: grid; place-items: center;
+      color: var(--muted); text-align: center;
+    }
+    .empty-icon {
+      width: 60px; height: 60px; border: 1px dashed #40505a; border-radius: 18px;
+      display: grid; place-items: center; margin: 0 auto 15px; color: var(--teal); font-size: 24px;
+    }
+    #result { display: none; }
+    .result-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .status {
+      border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 800;
+      letter-spacing: .07em; color: var(--teal); background: var(--teal-dim); border: 1px solid #2c6856;
+    }
+    .status.review { color: var(--amber); background: #352714; border-color: #72572b; }
+    .status.blocked { color: #ff9ca5; background: var(--red-dim); border-color: #80333c; }
+    .request-id { color: var(--muted); font: 11px ui-monospace, monospace; }
+    .alert {
+      display: none; border: 1px solid #8d3742; background: linear-gradient(90deg,#471a21,#291318);
+      border-radius: 11px; padding: 13px 15px; color: #ffc4ca; margin-bottom: 14px;
+    }
+    .alert strong { display: block; color: #fff; margin-bottom: 2px; }
+    .result-grid { display: grid; gap: 14px; }
+    .diff { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+    .diff-pane { background: #0b1014; min-width: 0; }
+    .diff-title { padding: 8px 11px; color: var(--muted); background: #12181d; font-size: 10px; text-transform: uppercase; letter-spacing: .11em; }
+    .diff pre {
+      margin: 0; padding: 12px; min-height: 105px; max-height: 175px; overflow: auto;
+      white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.55 ui-monospace, monospace;
+    }
+    .protect-count {
+      display: inline-block; margin-bottom: 10px; color: var(--teal); background: #102820;
+      border: 1px solid #285748; border-radius: 999px; padding: 4px 9px; font-size: 11px;
+    }
+    .metrics { display: grid; grid-template-columns: 1.2fr .8fr; gap: 14px; }
+    .classification { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
+    .right-name { font-size: 22px; font-weight: 760; letter-spacing: .02em; }
+    .confidence { color: var(--muted); font-size: 11px; text-align: right; }
+    .bar { width: 110px; height: 5px; background: #263039; border-radius: 9px; margin-top: 6px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; background: var(--teal); border-radius: inherit; }
+    .reasons { color: var(--amber); font-size: 11px; margin-top: 9px; }
+    .sla-value { font-size: 19px; font-weight: 720; }
+    .sla-sub { color: var(--muted); font-size: 11px; margin-top: 5px; }
+    .draft {
+      white-space: pre-wrap; min-height: 72px; padding: 12px; border-radius: 9px;
+      color: #ced7dc; background: #0b1014; border: 1px solid #28343c;
+    }
+    .draft.withheld { color: var(--muted); display: grid; place-items: center; font-style: italic; }
+    .actions { display: flex; gap: 8px; margin-top: 10px; }
+    details { border: 1px solid var(--line); border-radius: var(--radius); background: #0e1317; }
+    summary { padding: 13px 15px; cursor: pointer; color: #c8d2d7; font-weight: 650; }
+    .trace-meta { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 15px 12px; }
+    pre.trace {
+      border-top: 1px solid var(--line); margin: 0; padding: 15px; max-height: 360px; overflow: auto;
+      color: #a8d9ca; background: #080c0f; white-space: pre-wrap; overflow-wrap: anywhere;
+      font: 11px/1.55 ui-monospace, SFMono-Regular, monospace;
+    }
+    footer {
+      border-top: 1px solid var(--line); padding: 0 22px; display: flex;
+      align-items: center; justify-content: space-between; color: var(--muted); font-size: 10px;
+    }
+    .toast {
+      position: fixed; right: 20px; bottom: 55px; padding: 11px 14px; max-width: 360px;
+      border: 1px solid #416056; background: #14221e; border-radius: 9px; color: #d9eee8;
+      transform: translateY(20px); opacity: 0; pointer-events: none; transition: .2s;
+    }
+    .toast.show { transform: none; opacity: 1; }
+    @media (max-width: 840px) {
+      main { grid-template-columns: 1fr; }
+      .input-side { border-right: 0; border-bottom: 1px solid var(--line); }
+      .metrics, .diff { grid-template-columns: 1fr; }
+      header { padding: 0 15px; }
+      .top-badges .badge:not(:last-child) { display: none; }
+    }
+  </style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="brand">
+      <div class="mark">अ</div>
+      <div><h1>ADHIKAR</h1><p>Data Principal Request Triage</p></div>
+    </div>
+    <div class="top-badges">
+      <span class="badge good">● controls active</span>
+      <span class="badge" id="backendBadge">harness: …</span>
+      <span class="badge">human approval required</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="input-side">
+      <div class="section-label">New request</div>
+      <div class="card stack">
+        <div class="control">
+          <label for="corpus">Demo corpus</label>
+          <select id="corpus"><option value="">Paste a request or choose a case…</option></select>
+        </div>
+        <textarea id="requestText" placeholder="Paste the request exactly as received. Untrusted instructions will be treated as data…"></textarea>
+        <div class="row">
+          <div class="control"><label for="org">Organisation</label><select id="org"><option value="demo-org">Cleartrust Demo Org</option></select></div>
+          <div class="control"><label for="region">Processing region</label><select id="region"><option value="in">India · in</option><option value="eu">Europe · eu</option><option value="apac">APAC · apac</option><option value="us">United States · us</option></select></div>
+        </div>
+        <div>
+          <div class="section-label">Protection mode</div>
+          <div class="modes">
+            <label class="mode"><input type="radio" name="mode" value="defence_in_depth" checked><span><b>Defence in depth</b><span>Local tokenisation + harness redaction</span></span></label>
+            <label class="mode"><input type="radio" name="mode" value="harness_only"><span><b>Harness only</b><span>Raw text to configured harness protection</span></span></label>
+            <label class="mode"><input type="radio" name="mode" value="local_only"><span><b>Local only</b><span>Tokens sent; harness redaction disabled</span></span></label>
+          </div>
+        </div>
+        <div class="checks">
+          <label><input id="injection" type="checkbox" checked> Injection inspection</label>
+          <label><input id="redaction" type="checkbox" checked> PII redaction</label>
+        </div>
+        <button class="primary" id="triage">Run protected triage →</button>
+      </div>
+      <div class="queue">
+        <div class="section-label">Recent queue</div>
+        <div class="queue-list" id="queue"><div class="queue-item"><span class="queue-right">No requests yet</span></div></div>
+      </div>
+    </section>
+
+    <section class="result-side">
+      <div class="empty" id="empty">
+        <div><div class="empty-icon">⌁</div><strong>No request selected</strong><p>Run a protected triage to inspect the decision trace.</p></div>
+      </div>
+      <div id="result">
+        <div class="result-head"><span class="status" id="status">TRIAGED</span><span class="request-id" id="requestId"></span></div>
+        <div class="alert" id="alert"><strong>Adversarial content detected in submitted request.</strong><span>Instructions ignored. Logged as a security finding in the tamper-evident audit chain.</span></div>
+        <div class="result-grid">
+          <div class="card">
+            <div class="section-label">Identifier protection</div>
+            <span class="protect-count" id="protectCount"></span>
+            <div class="diff">
+              <div class="diff-pane"><div class="diff-title">Submitted · untrusted</div><pre id="before"></pre></div>
+              <div class="diff-pane"><div class="diff-title">Sent to model · protected</div><pre id="after"></pre></div>
+            </div>
+          </div>
+          <div class="metrics">
+            <div class="card">
+              <div class="section-label">Classification</div>
+              <div class="classification"><div><div class="right-name" id="right"></div><div class="reasons" id="reasons"></div></div><div class="confidence"><span id="confidence"></span><div class="bar"><i id="confidenceBar"></i></div></div></div>
+            </div>
+            <div class="card">
+              <div class="section-label">Organisation SLA</div>
+              <div class="sla-value" id="sla"></div><div class="sla-sub" id="slaSub"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="section-label">Draft response · human approval gate</div>
+            <div class="draft" id="draft"></div>
+            <div class="actions"><button class="primary" id="approve">Approve draft</button><button class="secondary" id="reject">Reject</button></div>
+          </div>
+          <details>
+            <summary>Decision trace · exact protected payload and response</summary>
+            <div class="trace-meta" id="traceMeta"></div>
+            <pre class="trace" id="trace"></pre>
+          </details>
+        </div>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <span>Controls aligned to DPDP obligations · identity verification remains out of band</span>
+    <div class="footer-badges"><span class="badge" id="regionBadge">served from: —</span><span class="badge good" id="chainBadge">chain checking…</span></div>
+  </footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  let corpus = [], activeRecord = null, activeRaw = "";
+  const api = async (url, options = {}) => {
+    const response = await fetch(url, {headers: {"Content-Type":"application/json"}, ...options});
+    if (!response.ok) {
+      let message = `Request failed (${response.status})`;
+      try { const body = await response.json(); message = body.detail?.message || body.detail?.code || message; } catch {}
+      throw new Error(message);
+    }
+    if (response.status === 204) return null;
+    return response.json();
+  };
+  const toast = message => {
+    $("toast").textContent = message; $("toast").classList.add("show");
+    setTimeout(() => $("toast").classList.remove("show"), 2600);
+  };
+  const escapeText = value => String(value ?? "");
+  const loadBoot = async () => {
+    try {
+      const [cases, health] = await Promise.all([api("/api/demo/corpus"), api("/api/health")]);
+      corpus = cases;
+      for (const item of corpus) {
+        const option = document.createElement("option");
+        option.value = item.id; option.textContent = `${item.id} · ${item.description}`;
+        $("corpus").appendChild(option);
+      }
+      $("backendBadge").textContent = `harness: ${health.harness_backend}`;
+      await Promise.all([refreshQueue(), refreshAudit()]);
+    } catch (error) { toast(error.message); }
+  };
+  $("corpus").addEventListener("change", event => {
+    const item = corpus.find(entry => entry.id === event.target.value);
+    if (item) $("requestText").value = item.text;
+  });
+  $("triage").addEventListener("click", async () => {
+    const text = $("requestText").value;
+    if (!text.trim()) return toast("Paste or select a request first.");
+    $("triage").disabled = true; $("triage").textContent = "Inspecting untrusted content…";
+    activeRaw = text;
+    try {
+      const mode = document.querySelector('input[name="mode"]:checked').value;
+      activeRecord = await api("/api/requests", {
+        method: "POST",
+        body: JSON.stringify({
+          text, org_id: $("org").value,
+          policy_overrides: {
+            region: $("region").value, tokenization_mode: mode,
+            injection_check: $("injection").checked,
+            redact_pii: $("redaction").checked
+          }
+        })
+      });
+      await renderRecord(activeRecord, activeRaw);
+      await Promise.all([refreshQueue(), refreshAudit()]);
+    } catch (error) { toast(error.message); }
+    finally { $("triage").disabled = false; $("triage").textContent = "Run protected triage →"; }
+  });
+  async function renderRecord(record, raw = "") {
+    const trace = await api(`/api/requests/${record.id}/trace`, {headers: {"X-Analyst-Id":"demo-analyst"}});
+    activeRecord = record;
+    $("empty").style.display = "none"; $("result").style.display = "block";
+    $("status").textContent = record.status.replaceAll("_", " ");
+    $("status").className = `status ${record.status === "BLOCKED" ? "blocked" : record.status === "NEEDS_HUMAN_REVIEW" ? "review" : ""}`;
+    $("requestId").textContent = record.id;
+    const flagged = Boolean(record.harness_meta.injection_flagged) || record.verdict.escalation.reasons.includes("ADVERSARIAL_CONTENT");
+    $("alert").style.display = flagged ? "block" : "none";
+    const localCount = record.harness_meta.local_protected || 0;
+    const harnessCount = (record.harness_meta.redactions || []).reduce((n, x) => n + x.count, 0);
+    $("protectCount").textContent = `${localCount + harnessCount} protections applied · ${localCount} local · ${harnessCount} harness`;
+    $("before").textContent = raw || trace.analyst_input || "Protected content only.";
+    $("after").textContent = trace.protected_input;
+    $("right").textContent = record.verdict.right_claimed;
+    const secondary = record.verdict.secondary_rights.length ? ` · secondary: ${record.verdict.secondary_rights.join(", ")}` : "";
+    $("reasons").textContent = (record.verdict.escalation.reasons.join(" · ") || "No escalation signals") + secondary;
+    const confidence = Math.round(record.verdict.confidence * 100);
+    $("confidence").textContent = `${confidence}% confidence`;
+    $("confidenceBar").style.width = `${confidence}%`;
+    const due = new Date(record.sla_due_at), now = new Date();
+    const days = Math.max(0, Math.ceil((due - now) / 86400000));
+    $("sla").textContent = due < now ? "SLA breached" : `${days} days remaining`;
+    const totalDays = record.harness_meta.sla_rule.days;
+    $("sla").style.color = due < now ? "var(--red)" : days <= Math.ceil(totalDays * .25) ? "var(--amber)" : "var(--text)";
+    $("slaSub").textContent = `${record.harness_meta.sla_rule.basis} · ${record.policy_version}`;
+    const withheld = record.verdict.escalation.required || !record.verdict.draft_response;
+    $("draft").className = `draft ${withheld ? "withheld" : ""}`;
+    $("draft").textContent = withheld ? "Draft withheld — escalation required" : record.verdict.draft_response;
+    $("approve").disabled = withheld;
+    $("traceMeta").innerHTML = [
+      `region ${trace.region_served || "—"}`, trace.provider || "provider —",
+      trace.model || "model —", `${trace.latency_ms || 0} ms`, `$${Number(trace.cost_usd || 0).toFixed(4)}`
+    ].map(value => `<span class="badge">${value}</span>`).join("");
+    $("trace").textContent = JSON.stringify(trace, null, 2);
+    $("regionBadge").textContent = `served from: ${trace.region_served || "—"}`;
+  }
+  async function refreshQueue() {
+    const records = await api("/api/requests");
+    $("queue").innerHTML = records.length ? records.slice(0, 8).map(record =>
+      `<div class="queue-item" data-id="${record.id}"><span><span class="queue-id">${record.id}</span><br><span class="queue-right">${record.verdict?.right_claimed || "—"}</span></span><span class="queue-right">${record.status.replaceAll("_"," ")}</span></div>`
+    ).join("") : '<div class="queue-item"><span class="queue-right">No requests yet</span></div>';
+    document.querySelectorAll(".queue-item[data-id]").forEach(item => item.onclick = async () => {
+      const record = await api(`/api/requests/${item.dataset.id}`);
+      await renderRecord(record);
+    });
+  }
+  async function refreshAudit() {
+    const chain = await api("/api/audit/verify");
+    $("chainBadge").textContent = chain.intact ? `chain intact · ${chain.events} events` : `chain broken at ${chain.broken_at}`;
+    $("chainBadge").className = chain.intact ? "badge good" : "badge";
+  }
+  $("approve").addEventListener("click", async () => {
+    try {
+      activeRecord = await api(`/api/requests/${activeRecord.id}/approve`, {method:"POST", body:JSON.stringify({analyst_id:"demo-analyst"})});
+      await renderRecord(activeRecord, activeRaw); await refreshAudit(); toast("Approved for the next human-controlled step. Nothing was sent.");
+    } catch (error) { toast(error.message); }
+  });
+  $("reject").addEventListener("click", async () => {
+    if (!activeRecord) return;
+    const reason = prompt("Reason for rejection:");
+    if (!reason) return;
+    try {
+      activeRecord = await api(`/api/requests/${activeRecord.id}/reject`, {method:"POST", body:JSON.stringify({analyst_id:"demo-analyst", reason})});
+      await renderRecord(activeRecord, activeRaw); await refreshAudit(); toast("Request rejected and audit event appended.");
+    } catch (error) { toast(error.message); }
+  });
+  loadBoot();
+</script>
+</body>
+</html>
