@@ -1,6 +1,5 @@
 # Adhikar
 
-> Submission to the **Konsole by Cleartrust Hackathon 2026**
 
 Adhikar is a Data Principal Request (DPR) triage console for privacy operations teams. It turns an untrusted free-text request into a protected, schema-validated classification, an organisation SLA, a human-gated draft, and tamper-evident audit evidence.
 
@@ -58,7 +57,7 @@ Uvicorn running on http://127.0.0.1:8018
 Application startup complete.
 ```
 
-The default `.env` selects `HARNESS_BACKEND=mock`. For on-site integration, set `HARNESS_BACKEND=konsole`, fill the endpoint/key/model values, and resolve the five `TODO(event)` markers in `app/harness.py` with the event API contract. No other module changes.
+The default `.env` selects `HARNESS_BACKEND=mock`, which runs entirely offline. External provider configuration is isolated to `app/harness.py`; no other application module needs provider-specific code.
 
 Run every proof:
 
@@ -132,36 +131,27 @@ flowchart LR
     I --> J[Hash-chained audit]
 ```
 
-The detailed diagram and trust-boundary notes are in [docs/architecture.md](docs/architecture.md). Before final hackathon submission, capture the adversarial banner, protected diff, and expanded trace from the running local console; no screenshot is checked in unless it was captured from the real application.
+The detailed diagram and trust-boundary notes are in [docs/architecture.md](docs/architecture.md).
 
 The only external-AI boundary is:
 
 ```text
 pipeline → Harness protocol → MockHarness (offline)
-                            └→ KonsoleHarness (event adapter)
+                            └→ configured external provider adapter
 ```
 
 `pipeline.py` sanitises, deduplicates, tokenises, builds nonce-delimited prompts, calls the adapter, parses once with one repair attempt, validates against the Pydantic verdict schema, applies deterministic sanity rules, blocks foreign identifier tokens, computes the Organisation SLA, persists, and appends an audit event. No application logs contain request values.
 
 The token map is request-scoped, stored separately in an authenticated encrypted envelope, and rehydrated only for the analyst-facing diff when an analyst marker is supplied. Trace persistence replaces every locally matched identifier with its token; audit exports contain identifiers only as categories and counts. For production, replace the demo marker with authenticated tenant/resource authorisation, replace local key handling with a KMS/HSM, define retention/deletion rules, and complete a legal and threat-model review.
 
-### Rubric mapping
-
-| Rubric | Weight | Where this project earns it |
-|---|---:|---|
-| Technical Execution | 30% | Adapter isolation, strict schema validation, bounded retries, fail-closed pipeline, passing eval suite, mechanical no-bypass test |
-| Security Awareness | 30% | Live injection finding, schema-level identity boundary, reversible tokenisation, output leak check, hash-chained audit, Unicode/base64 hardening |
-| Real-World Value | 25% | Named privacy-operations user, manual inbox workflow, configurable Organisation SLA, regulator-facing evidence |
-| Innovation | 15% | Treating the DPR itself as hostile input and converting harness signals into auditable security findings |
-
 ## Security and limitations
 
-- This is a hackathon-quality reference implementation, not a production service.
+- This is a proof-of-concept reference implementation, not a production service.
 - API authentication and resource-level tenant authorisation must be added before exposing it beyond a trusted demo environment.
 - `TOKEN_MAP_KEY=replace-for-production` is intentionally non-production. Use a strong secret locally and managed envelope encryption in production.
-- The mock classifier is a deterministic simulator, not evidence of real-model accuracy. Re-run the same evals after on-site harness integration.
+- The mock classifier is a deterministic simulator, not evidence of real-model accuracy. Re-run the same evaluations after integrating an external provider.
 - The local token patterns are defence in depth and do not replace the harness. Pattern detection can have false negatives.
-- Exact provider request/response field names, redaction-report shape, injection signal, regional routing, and fallback routing remain the five explicit event integration points.
+- Exact provider request/response field names, redaction-report shape, injection signal, regional routing, and fallback routing remain provider-specific integration points.
 
 ## License
 
