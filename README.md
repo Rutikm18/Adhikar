@@ -1,5 +1,6 @@
 # Adhikar
 
+> Submission to the **Konsole by Cleartrust Hackathon 2026**
 
 Adhikar is a Data Principal Request (DPR) triage console for privacy operations teams. It turns an untrusted free-text request into a protected, schema-validated classification, an organisation SLA, a human-gated draft, and tamper-evident audit evidence.
 
@@ -17,7 +18,7 @@ Adhikar makes those risks visible and testable:
 |---|---|---|
 | PII protection | Request-scoped reversible local tokens plus configurable harness redaction | Before/after diff and category counts |
 | Prompt-injection resistance | Unicode/encoding inspection, nonce data boundaries, harness signal, forced escalation | Red adversarial banner and `BLOCKED` status |
-| Data residency | Per-request `in/eu/us/apac` policy passed only through the harness adapter | `served from` badge and trace metadata |
+| Data residency | Per-request `in/eu/us/apac` policy passed only through the harness adapter; `sarvam-105b` as Indian-provider sovereign routing option | `served from` badge and trace metadata |
 | Auditability | Canonical append-only events hash-chained to the previous event | Chain-integrity badge and NDJSON export |
 | Human control | The verdict schema cannot assert identity verification; escalated drafts are withheld | Approval gate and explicit escalation reasons |
 | Provider isolation | No application module except `app/harness.py` can call the configured AI harness | Mechanical boundary test |

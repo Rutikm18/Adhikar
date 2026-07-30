@@ -71,7 +71,7 @@ class DPRRecord(BaseModel):
 
 
 class RequestCreate(BaseModel):
-    text: str
+    text: str = Field(max_length=100_000)
     org_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
     policy_overrides: dict = Field(default_factory=dict)
 

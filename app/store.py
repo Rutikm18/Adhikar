@@ -11,6 +11,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
 from app.schemas import DPRRecord, TriageVerdict
 
 
@@ -20,22 +23,33 @@ class Store:
         master = hashlib.sha256(token_map_key.encode("utf-8")).digest()
         self._enc_key = hmac.new(master, b"adhikar-token-map-enc", hashlib.sha256).digest()
         self._mac_key = hmac.new(master, b"adhikar-token-map-mac", hashlib.sha256).digest()
+        self._aead = AESGCM(
+            hmac.new(master, b"adhikar-token-map-aesgcm", hashlib.sha256).digest()
+        )
         self.init_db()
 
     @contextmanager
     def connect(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path, timeout=10)
         connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA journal_mode=WAL")
         connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute("PRAGMA busy_timeout=10000")
         try:
             with connection:
                 yield connection
         finally:
             connection.close()
 
+    @contextmanager
+    def transaction(self) -> Iterator[sqlite3.Connection]:
+        with self.connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            yield connection
+
     def init_db(self) -> None:
         with self.connect() as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA synchronous=NORMAL")
             conn.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS requests (
@@ -92,11 +106,10 @@ class Store:
         return bytes(a ^ b for a, b in zip(data, output))
 
     def _encrypt_map(self, token_map: dict[str, str]) -> str:
-        nonce = secrets.token_bytes(16)
+        nonce = secrets.token_bytes(12)
         plaintext = json.dumps(token_map, sort_keys=True).encode("utf-8")
-        ciphertext = self._crypt(plaintext, nonce)
-        tag = hmac.new(self._mac_key, nonce + ciphertext, hashlib.sha256).digest()
-        return base64.urlsafe_b64encode(nonce + tag + ciphertext).decode("ascii")
+        ciphertext = self._aead.encrypt(nonce, plaintext, b"adhikar-token-map-v2")
+        return "v2." + base64.urlsafe_b64encode(nonce + ciphertext).decode("ascii")
 
     def decrypt_map(self, request_id: str) -> dict[str, str]:
         with self.connect() as conn:
@@ -105,7 +118,25 @@ class Store:
             ).fetchone()
         if not row:
             return {}
-        envelope = base64.urlsafe_b64decode(row["encrypted_map"])
+        encoded = row["encrypted_map"]
+        if encoded.startswith("v2."):
+            try:
+                envelope = base64.urlsafe_b64decode(encoded[3:])
+                if len(envelope) < 29:
+                    raise ValueError("Token map envelope is invalid.")
+                plaintext = self._aead.decrypt(
+                    envelope[:12],
+                    envelope[12:],
+                    b"adhikar-token-map-v2",
+                )
+                return json.loads(plaintext.decode("utf-8"))
+            except (InvalidTag, ValueError, json.JSONDecodeError) as exc:
+                raise ValueError("Token map integrity check failed.") from exc
+
+        # Backward-compatible reader for token maps created before the AES-GCM format.
+        envelope = base64.urlsafe_b64decode(encoded)
+        if len(envelope) < 48:
+            raise ValueError("Token map envelope is invalid.")
         nonce, tag, ciphertext = envelope[:16], envelope[16:48], envelope[48:]
         expected = hmac.new(self._mac_key, nonce + ciphertext, hashlib.sha256).digest()
         if not hmac.compare_digest(tag, expected):
@@ -165,52 +196,81 @@ class Store:
         token_map: dict[str, str],
         policy_fingerprint: str,
     ) -> None:
+        with self.transaction() as conn:
+            self.save_in_transaction(
+                conn,
+                record,
+                trace,
+                tokenized_text,
+                token_map,
+                policy_fingerprint,
+            )
+
+    def save_in_transaction(
+        self,
+        conn: sqlite3.Connection,
+        record: DPRRecord,
+        trace: dict,
+        tokenized_text: str,
+        token_map: dict[str, str],
+        policy_fingerprint: str,
+    ) -> None:
         verdict_json = record.verdict.model_dump_json() if record.verdict else None
-        with self.connect() as conn:
-            conn.execute("BEGIN IMMEDIATE")
+        conn.execute(
+            """
+            INSERT INTO requests (
+                id, org_id, received_at, raw_text_hash, status, verdict_json,
+                sla_due_at, harness_meta_json, policy_version, trace_json,
+                tokenized_text
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                record.id,
+                record.org_id,
+                record.received_at.isoformat(),
+                record.raw_text_hash,
+                record.status,
+                verdict_json,
+                record.sla_due_at.isoformat() if record.sla_due_at else None,
+                json.dumps(record.harness_meta, sort_keys=True),
+                record.policy_version,
+                json.dumps(trace, sort_keys=True),
+                tokenized_text,
+            ),
+        )
+        conn.execute(
+            "INSERT INTO token_maps(request_id, encrypted_map) VALUES (?, ?)",
+            (record.id, self._encrypt_map(token_map)),
+        )
+        if record.verdict:
             conn.execute(
                 """
-                INSERT INTO requests VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT OR REPLACE INTO verdict_cache VALUES (?, ?, ?, ?, ?)
                 """,
                 (
-                    record.id,
                     record.org_id,
-                    record.received_at.isoformat(),
                     record.raw_text_hash,
-                    record.status,
+                    policy_fingerprint,
                     verdict_json,
-                    record.sla_due_at.isoformat() if record.sla_due_at else None,
                     json.dumps(record.harness_meta, sort_keys=True),
-                    record.policy_version,
-                    json.dumps(trace, sort_keys=True),
-                    tokenized_text,
                 ),
             )
-            conn.execute(
-                "INSERT INTO token_maps(request_id, encrypted_map) VALUES (?, ?)",
-                (record.id, self._encrypt_map(token_map)),
-            )
-            if record.verdict:
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO verdict_cache VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (
-                        record.org_id,
-                        record.raw_text_hash,
-                        policy_fingerprint,
-                        verdict_json,
-                        json.dumps(record.harness_meta, sort_keys=True),
-                    ),
-                )
 
-    def list_requests(self, status: str | None = None) -> list[DPRRecord]:
+    def list_requests(
+        self,
+        status: str | None = None,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[DPRRecord]:
         query = "SELECT * FROM requests"
-        args: tuple[Any, ...] = ()
+        args: tuple[Any, ...]
         if status:
             query += " WHERE status=?"
-            args = (status,)
-        query += " ORDER BY received_at DESC LIMIT 200"
+            args = (status, limit, offset)
+        else:
+            args = (limit, offset)
+        query += " ORDER BY received_at DESC LIMIT ? OFFSET ?"
         with self.connect() as conn:
             rows = conn.execute(query, args).fetchall()
         return [self._row_to_record(row) for row in rows]
@@ -240,9 +300,29 @@ class Store:
             )
         return self.get_request(request_id)
 
+    def transition_status(
+        self,
+        conn: sqlite3.Connection,
+        request_id: str,
+        expected_statuses: tuple[str, ...],
+        new_status: str,
+    ) -> bool:
+        placeholders = ",".join("?" for _ in expected_statuses)
+        cursor = conn.execute(
+            f"UPDATE requests SET status=? WHERE id=? AND status IN ({placeholders})",
+            (new_status, request_id, *expected_statuses),
+        )
+        return cursor.rowcount == 1
+
+    def healthcheck(self) -> bool:
+        try:
+            with self.connect() as conn:
+                return conn.execute("SELECT 1").fetchone()[0] == 1
+        except sqlite3.Error:
+            return False
+
     def reset(self) -> None:
-        with self.connect() as conn:
-            conn.execute("BEGIN IMMEDIATE")
+        with self.transaction() as conn:
             conn.execute("DELETE FROM audit_events")
             conn.execute("DELETE FROM token_maps")
             conn.execute("DELETE FROM requests")

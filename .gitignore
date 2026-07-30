@@ -7,4 +7,7 @@ __pycache__/
 .venv/
 .pytest_cache/
 .DS_Store
+konsole_raw.json
+konsole_capabilities.md
 
+.gstack/

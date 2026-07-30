@@ -12,7 +12,7 @@ from pydantic import ValidationError
 
 from app.audit import AuditLog
 from app.config import ROOT, settings
-from app.harness import KonsoleHarness, MockHarness, Policy
+from app.harness import BASE_URL, KonsoleHarness, MockHarness, Policy
 from app.pipeline import Pipeline
 from app.sanitize import EmptyInput
 from app.schemas import AnalystAction, DPRRecord, RequestCreate
@@ -22,6 +22,7 @@ from app.tokenizer import rehydrate
 STARTED_AT = time.monotonic()
 CORPUS_PATH = ROOT / "data" / "corpus.json"
 UI_PATH = ROOT / "ui" / "index.html"
+FAVICON_PATH = ROOT / "ui" / "favicon.png"
 
 store = Store(settings.database_path, settings.token_map_key)
 audit = AuditLog(store)
@@ -29,9 +30,9 @@ harness = (
     MockHarness()
     if settings.harness_backend == "mock"
     else KonsoleHarness(
-        settings.harness_base_url,
-        settings.harness_api_key,
-        settings.harness_fallback_model,
+        api_key=settings.harness_api_key,
+        base_url=settings.harness_base_url or BASE_URL,
+        fallback_model=settings.harness_fallback_model,
     )
 )
 pipeline = Pipeline(store, audit, harness)
@@ -105,6 +106,11 @@ def request_policy(overrides: dict) -> Policy:
 @app.get("/", include_in_schema=False)
 def index() -> FileResponse:
     return FileResponse(UI_PATH)
+
+
+@app.get("/favicon.png", include_in_schema=False)
+def favicon() -> FileResponse:
+    return FileResponse(FAVICON_PATH, media_type="image/png")
 
 
 @app.post("/api/requests", response_model=DPRRecord)

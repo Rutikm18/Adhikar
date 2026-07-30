@@ -18,19 +18,23 @@ import httpx
 from pydantic import BaseModel
 
 # =============================================================================
-# CAPABILITIES — set these from konsole_capabilities.md after running the probe.
-# Every one of these is a claim you will make in your README. Do not guess.
+# CAPABILITIES — set from probe_konsole.py results (see docs/CAPABILITY_FINDINGS.md)
 # =============================================================================
-SUPPORTS_PII_DETECTION = True      # confirmed in docs
-SUPPORTS_PII_MASKING = True        # confirmed in docs
-SUPPORTS_JSON_MODE = True          # set from probe [5]
-SUPPORTS_INJECTION_FLAG = False    # set from probe [4] — likely False
-REGION_PARAM_NAME: str | None = None   # set from probe [7]; None = not supported
+# PII: Konsole ALWAYS masks PII in model input by default (__PII_TYPE_N__ tokens).
+# pii_detection=True adds session_pii_map to the response (our redaction evidence).
+# WARNING: do NOT send pii_masking=True — it reveals masked values back to the model.
+SUPPORTS_PII_DETECTION = True      # confirmed: pii_detected field + session_pii_map
+SUPPORTS_PII_MASKING = True        # confirmed: input masking is always active by default
+SUPPORTS_JSON_MODE = True          # confirmed: response_format json_object parses cleanly
+SUPPORTS_INJECTION_FLAG = False    # confirmed: prompt_injection_detected always False; app-layer required
+REGION_PARAM_NAME: str | None = "region"   # confirmed: accepted by API (probe [7])
 
 # Model IDs confirmed working by probe [1]/[2].
-MODEL_PRIMARY = "gemini-3.1-flash-lite"
-MODEL_FALLBACK = "qwen-max"
-MODEL_SOVEREIGN = "sarvam-m"   # Indian provider — your data-sovereignty story
+# gemini-3.1-flash-lite HTTP 400 from Google, falls back to deepseek with empty content field.
+# sarvam-m is deprecated — use sarvam-105b.
+MODEL_PRIMARY = "qwen-max"
+MODEL_FALLBACK = "deepseek-chat"
+MODEL_SOVEREIGN = "sarvam-105b"  # Indian provider — data-sovereignty routing
 
 BASE_URL = os.getenv("KONSOLE_BASE_URL", "https://api.konsole.one/v1")
 
@@ -115,8 +119,9 @@ class KonsoleHarness:
         }
         if policy.redact_pii and SUPPORTS_PII_DETECTION:
             payload["pii_detection"] = True
-        if policy.redact_pii and SUPPORTS_PII_MASKING:
-            payload["pii_masking"] = True
+        # pii_masking=True is intentionally omitted: it tells the model what was masked,
+        # causing more PII to appear in the model response. The default Konsole behaviour
+        # (no param) already masks PII in model input via __PII_TYPE_N__ tokens.
         if policy.json_mode and SUPPORTS_JSON_MODE:
             payload["response_format"] = {"type": "json_object"}
         if REGION_PARAM_NAME:
@@ -126,41 +131,40 @@ class KonsoleHarness:
     # -- response parsing -----------------------------------------------------
     @staticmethod
     def _parse(body: dict, elapsed_ms: float, model: str) -> HarnessResponse:
+        import re as _re
         try:
             text = body["choices"][0]["message"]["content"] or ""
         except (KeyError, IndexError, TypeError):
             raise HarnessUnavailable(f"Unexpected response shape: {list(body)[:8]}")
 
-        # Redaction report. The exact key is provider-specific — update these
-        # candidates from konsole_raw.json after the probe.
+        # Redaction evidence from session_pii_map (present when pii_detection=True).
+        # Format: {"__PII_TYPE_hash__": "original_value", ...}
+        # We count by type and never store original values.
         redactions: list[Redaction] = []
-        for key in ("pii", "pii_report", "redactions", "security", "masked_entities"):
-            blob = body.get(key)
-            if not blob:
-                continue
-            if isinstance(blob, dict):
-                items = blob.get("entities") or blob.get("detected") or blob.get("redactions") or []
-            else:
-                items = blob
-            if isinstance(items, list):
-                counts: dict[str, int] = {}
-                for it in items:
-                    kind = (it.get("type") or it.get("kind") or it.get("entity_type") or "UNKNOWN") \
-                        if isinstance(it, dict) else str(it)
-                    counts[kind] = counts.get(kind, 0) + 1
-                redactions = [Redaction(kind=k, count=v) for k, v in counts.items()]
-            break
+        session_pii_map = body.get("session_pii_map")
+        if session_pii_map and isinstance(session_pii_map, dict):
+            counts: dict[str, int] = {}
+            for token in session_pii_map.keys():
+                m = _re.match(r"__PII_(?:IN_)?([A-Z_]+?)_[0-9a-f]+__", token)
+                kind = m.group(1) if m else "UNKNOWN"
+                counts[kind] = counts.get(kind, 0) + 1
+            redactions = [Redaction(kind=k, count=v) for k, v in counts.items()]
 
-        # Injection signal, if the platform emits one.
+        # Injection signal. SUPPORTS_INJECTION_FLAG=False (confirmed by probe): the
+        # prompt_injection_detected field exists but was always False in testing.
+        # App-layer detection in pipeline.py is the real control.
         injection_flagged = False
         injection_detail = None
         if SUPPORTS_INJECTION_FLAG:
-            for key in ("security", "guardrails", "moderation"):
-                blob = body.get(key)
-                if isinstance(blob, dict) and blob.get("prompt_injection"):
-                    injection_flagged = True
-                    injection_detail = json.dumps(blob)[:500]
-                    break
+            injection_flagged = bool(body.get("prompt_injection_detected"))
+            if injection_flagged:
+                injection_detail = f"blocked={body.get('prompt_injection_blocked')}"
+
+        # x_fallback tells us the actual model used when Konsole auto-rerouted.
+        actual_model = body.get("model") or model
+        fallback_info = body.get("x_fallback")
+        if isinstance(fallback_info, dict) and fallback_info.get("used_model"):
+            actual_model = fallback_info["used_model"]
 
         usage = body.get("usage") or {}
         return HarnessResponse(
@@ -169,8 +173,8 @@ class KonsoleHarness:
             injection_flagged=injection_flagged,
             injection_detail=injection_detail,
             region_served=body.get("region") or body.get("region_served"),
-            provider=body.get("provider"),
-            model=body.get("model") or model,
+            provider=(fallback_info or {}).get("used_provider") or body.get("provider"),
+            model=actual_model,
             latency_ms=int(elapsed_ms),
             prompt_tokens=usage.get("prompt_tokens", 0),
             completion_tokens=usage.get("completion_tokens", 0),
