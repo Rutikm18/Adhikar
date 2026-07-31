@@ -1,0 +1,52 @@
+# Adhikar — one service, one image, one data volume.
+#
+#   docker compose up --build            # offline mock backend, works air-gapped
+#   HARNESS_BACKEND=konsole docker compose up --build   # live (needs .env creds)
+#
+# Compose auto-reads a .env file in this directory for ${VAR} substitution below,
+# so an existing .env (HARNESS_BACKEND=konsole, HARNESS_API_KEY=...) is picked up
+# at runtime and injected as env vars — the key is never written into the image.
+
+services:
+  adhikar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: adhikar:latest
+    container_name: adhikar
+    ports:
+      - "8018:8018"
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      HARNESS_BACKEND: ${HARNESS_BACKEND:-mock}
+      HARNESS_BASE_URL: ${HARNESS_BASE_URL:-}
+      HARNESS_API_KEY: ${HARNESS_API_KEY:-}
+      HARNESS_MODEL: ${HARNESS_MODEL:-mock-dpr-v1}
+      HARNESS_FALLBACK_MODEL: ${HARNESS_FALLBACK_MODEL:-}
+      DEFAULT_REGION: ${DEFAULT_REGION:-in}
+      TOKEN_MAP_KEY: ${TOKEN_MAP_KEY:-replace-for-production}
+      ANALYST_API_KEY: ${ANALYST_API_KEY:-}
+      ENABLE_DEMO_ENDPOINTS: ${ENABLE_DEMO_ENDPOINTS:-true}
+      DATABASE_PATH: /data/adhikar.db
+    volumes:
+      - adhikar-data:/data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8018/api/health', timeout=3).status==200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    # Defence in depth: the app never needs to write outside /data.
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  adhikar-data:

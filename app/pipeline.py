@@ -187,7 +187,13 @@ class Pipeline:
                 "Draft contained an identifier token not present in this request.",
             )
             blocked = True
-        if harness_meta.get("injection_flagged"):
+        # Any adversarial finding blocks, regardless of which layer detected it:
+        # the harness flag (mock only), a homoglyph confusable, or the model's own
+        # self-report. The Konsole harness never sets injection_flagged
+        # (SUPPORTS_INJECTION_FLAG=False), so keying BLOCKED off the reason keeps the
+        # status consistent across backends and matches the documented posture
+        # (adversarial content -> BLOCKED + red banner).
+        if "ADVERSARIAL_CONTENT" in verdict.escalation.reasons:
             blocked = True
         if verdict.third_party_data_requested:
             blocked = True
@@ -248,17 +254,27 @@ class Pipeline:
             "injection_flagged": harness_meta.get("injection_flagged", False),
             "note": "Matched identifier values are token-protected before trace persistence.",
         }
-        self.store.save(
-            record, trace, tokenized_text, token_map, fingerprint
+        action = (
+            "BLOCK"
+            if status == "BLOCKED"
+            else ("ESCALATE" if status == "NEEDS_HUMAN_REVIEW" else "TRIAGE")
         )
-        self.audit.append(
-            org_id,
-            record.id,
-            "BLOCK" if status == "BLOCKED" else (
-                "ESCALATE" if status == "NEEDS_HUMAN_REVIEW" else "TRIAGE"
-            ),
-            "system",
-            harness_meta,
-            policy_version,
-        )
+        with self.store.transaction() as connection:
+            self.store.save_in_transaction(
+                connection,
+                record,
+                trace,
+                tokenized_text,
+                token_map,
+                fingerprint,
+            )
+            self.audit.append(
+                org_id,
+                record.id,
+                action,
+                "system",
+                harness_meta,
+                policy_version,
+                connection=connection,
+            )
         return record, False

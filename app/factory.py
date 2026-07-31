@@ -3,9 +3,11 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 
 from app.api import create_api_router
-from app.config import Settings, settings as default_settings
+from app.config import ROOT, Settings, settings as default_settings
 from app.harness import Harness
 from app.middleware import PlatformSecurityMiddleware
 from app.runtime import ApplicationServices, build_services
@@ -28,7 +30,13 @@ def create_app(
         openapi_url=None,
     )
     application.state.services = selected_services
+    application.add_middleware(GZipMiddleware, minimum_size=1_000)
     application.add_middleware(PlatformSecurityMiddleware)
+    application.mount(
+        "/assets",
+        StaticFiles(directory=ROOT / "ui" / "vendor"),
+        name="assets",
+    )
 
     @application.exception_handler(RequestValidationError)
     async def validation_error_handler(_request, exc: RequestValidationError):
@@ -52,4 +60,3 @@ def create_app(
 
     application.include_router(create_api_router(selected_services))
     return application
-

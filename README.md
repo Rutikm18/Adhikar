@@ -1,7 +1,5 @@
 # Adhikar
 
-> Submission to the **Konsole by Cleartrust Hackathon 2026**
-
 Adhikar is a Data Principal Request (DPR) triage console for privacy operations teams. It turns an untrusted free-text request into a protected, schema-validated classification, an organisation SLA, a human-gated draft, and tamper-evident audit evidence.
 
 This project **demonstrates controls aligned to DPDP obligations**. It does not make an organisation compliant, replace legal advice, or automate identity verification.
@@ -134,6 +132,23 @@ flowchart LR
 
 The detailed diagram and trust-boundary notes are in [docs/architecture.md](docs/architecture.md).
 
+The backend is intentionally a modular monolith. Its product boundaries are:
+
+```text
+app/main.py        ASGI entry point only
+app/factory.py     application composition, disabled API docs, safe validation errors
+app/api.py         HTTP routes and workflow state transitions
+app/runtime.py     bounded process state and dependency container
+app/middleware.py  request limits, request IDs, security and cache headers
+app/pipeline.py    deterministic triage orchestration and fail-closed policy
+app/harness.py     only external model-provider boundary
+app/store.py       SQLite persistence, AES-GCM token maps, transactions and indexes
+app/audit.py       tamper-evident hash chain
+app/schemas.py     domain and transport contracts
+```
+
+This keeps deployment operationally simple while separating transport, orchestration, external integration, and persistence. Interactive FastAPI documentation and the OpenAPI endpoint are disabled. Demo endpoints can be removed from the runtime surface with `ENABLE_DEMO_ENDPOINTS=false`.
+
 The only external-AI boundary is:
 
 ```text
@@ -143,7 +158,7 @@ pipeline → Harness protocol → MockHarness (offline)
 
 `pipeline.py` sanitises, deduplicates, tokenises, builds nonce-delimited prompts, calls the adapter, parses once with one repair attempt, validates against the Pydantic verdict schema, applies deterministic sanity rules, blocks foreign identifier tokens, computes the Organisation SLA, persists, and appends an audit event. No application logs contain request values.
 
-The token map is request-scoped, stored separately in an authenticated encrypted envelope, and rehydrated only for the analyst-facing diff when an analyst marker is supplied. Trace persistence replaces every locally matched identifier with its token; audit exports contain identifiers only as categories and counts. For production, replace the demo marker with authenticated tenant/resource authorisation, replace local key handling with a KMS/HSM, define retention/deletion rules, and complete a legal and threat-model review.
+The token map is request-scoped, stored separately with AES-GCM authenticated encryption, and rehydration is disabled unless `ANALYST_API_KEY` is explicitly configured. Rehydration then requires both an analyst identifier and the key. Trace persistence replaces every locally matched identifier with its token; audit exports contain identifiers only as categories and counts. For production, replace the shared analyst key with authenticated tenant/resource authorisation, move key handling to a KMS/HSM, define retention/deletion rules, and complete a legal and threat-model review.
 
 ## Security and limitations
 

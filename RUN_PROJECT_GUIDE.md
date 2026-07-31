@@ -1,6 +1,6 @@
 # How to Run Adhikar
 
-This guide starts Adhikar locally with the offline mock harness. The mock mode needs no API key and is the recommended way to test the project before the hackathon.
+This guide starts Adhikar locally with the offline mock harness. The mock mode needs no API key and is the recommended way to test the project before connecting an external provider.
 
 ## 1. Open a terminal
 
@@ -164,8 +164,9 @@ Open a web browser and visit:
 Useful development pages:
 
 - Application: [http://127.0.0.1:8018](http://127.0.0.1:8018)
-- API documentation: [http://127.0.0.1:8018/docs](http://127.0.0.1:8018/docs)
 - Health check: [http://127.0.0.1:8018/api/health](http://127.0.0.1:8018/api/health)
+
+Interactive API documentation is intentionally disabled to reduce the public attack surface.
 
 ## 9. Try a normal request
 

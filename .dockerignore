@@ -1,0 +1,45 @@
+# Secrets — never bake credentials into an image layer.
+.env
+.env.*
+!.env.example
+
+# Version control / CI
+.git
+.gitignore
+.github
+
+# Python caches and virtualenvs
+.venv
+venv
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Local database + WAL (created fresh in the /data volume)
+*.db
+*.db-shm
+*.db-wal
+
+# Not needed at runtime (image serves app/ + data/ + ui/ only)
+tests/
+evals/
+tools/
+docs/
+*.md
+RUN_PROJECT_GUIDE.md
+plan.md
+
+# Probe artifacts (may contain response payloads)
+konsole_raw.json
+konsole_capabilities.md
+
+# Container build files themselves
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# OS / editor noise
+.DS_Store
+node_modules

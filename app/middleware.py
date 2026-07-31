@@ -61,14 +61,15 @@ class PlatformSecurityMiddleware(BaseHTTPMiddleware):
             "default-src 'self'; "
             "base-uri 'self'; "
             "connect-src 'self'; "
-            "font-src 'self' https://fonts.gstatic.com; "
+            "font-src 'self'; "
             "form-action 'self'; "
             "frame-ancestors 'none'; "
             "img-src 'self' data:; "
-            "script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com"
+            "script-src 'self'; "
+            "style-src 'self' 'unsafe-inline'"
         )
         if path.startswith("/api/"):
             response.headers["Cache-Control"] = "no-store"
+        elif path.startswith("/assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
         return response
-

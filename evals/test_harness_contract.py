@@ -239,7 +239,7 @@ def t9_no_pii_in_logs() -> None:
 
 
 # =============================================================================
-# T10 — Submission requirements
+# T10 — Repository requirements
 # =============================================================================
 def t10_submission() -> None:
     lic = ROOT / "LICENSE"
@@ -251,7 +251,10 @@ def t10_submission() -> None:
     check("SUB README exists", readme.exists())
     if readme.exists():
         txt = readme.read_text(errors="ignore").lower()
-        check("SUB README has hackathon attribution", "konsole" in txt and "hackathon" in txt)
+        check(
+            "SUB README avoids event-specific marketing",
+            "hackathon" not in txt and "submission to" not in txt,
+        )
         check("SUB README has build instructions",
               any(k in txt for k in ("## build", "## setup", "## installation", "getting started")))
         check("SUB README has usage guide", "usage" in txt)

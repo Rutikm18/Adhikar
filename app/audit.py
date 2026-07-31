@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import sqlite3
 from datetime import datetime, timezone
 from typing import Iterator
 
@@ -25,6 +26,8 @@ class AuditLog:
         actor: str,
         harness: dict,
         policy_version: str,
+        *,
+        connection: sqlite3.Connection | None = None,
     ) -> dict:
         safe_harness = {
             key: harness.get(key)
@@ -38,53 +41,80 @@ class AuditLog:
                 "cost_usd",
             )
         }
-        with self.store.connect() as conn:
-            conn.execute("BEGIN IMMEDIATE")
-            last = conn.execute(
-                "SELECT seq, hash FROM audit_events ORDER BY seq DESC LIMIT 1"
-            ).fetchone()
-            seq = (last["seq"] + 1) if last else 1
-            prev_hash = last["hash"] if last else "0" * 64
-            event = {
-                "seq": seq,
-                "ts": datetime.now(timezone.utc).isoformat(),
-                "org_id": org_id,
-                "request_id": request_id,
-                "action": action,
-                "actor": actor,
-                "harness": safe_harness,
-                "policy_version": policy_version,
-                "prev_hash": prev_hash,
-            }
-            event_hash = hashlib.sha256(_canonical(event).encode("utf-8")).hexdigest()
-            event["hash"] = event_hash
-            conn.execute(
-                """
-                INSERT INTO audit_events
-                    (seq, ts, org_id, request_id, action, actor, event_json, prev_hash, hash)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    seq,
-                    event["ts"],
-                    org_id,
-                    request_id,
-                    action,
-                    actor,
-                    _canonical(event),
-                    prev_hash,
-                    event_hash,
-                ),
+        if connection is not None:
+            return self._append_in_transaction(
+                connection,
+                org_id,
+                request_id,
+                action,
+                actor,
+                safe_harness,
+                policy_version,
             )
+        with self.store.transaction() as conn:
+            return self._append_in_transaction(
+                conn,
+                org_id,
+                request_id,
+                action,
+                actor,
+                safe_harness,
+                policy_version,
+            )
+
+    @staticmethod
+    def _append_in_transaction(
+        conn: sqlite3.Connection,
+        org_id: str,
+        request_id: str,
+        action: str,
+        actor: str,
+        safe_harness: dict,
+        policy_version: str,
+    ) -> dict:
+        last = conn.execute(
+            "SELECT seq, hash FROM audit_events ORDER BY seq DESC LIMIT 1"
+        ).fetchone()
+        seq = (last["seq"] + 1) if last else 1
+        prev_hash = last["hash"] if last else "0" * 64
+        event = {
+            "seq": seq,
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "org_id": org_id,
+            "request_id": request_id,
+            "action": action,
+            "actor": actor,
+            "harness": safe_harness,
+            "policy_version": policy_version,
+            "prev_hash": prev_hash,
+        }
+        event_hash = hashlib.sha256(_canonical(event).encode("utf-8")).hexdigest()
+        event["hash"] = event_hash
+        conn.execute(
+            """
+            INSERT INTO audit_events
+                (seq, ts, org_id, request_id, action, actor, event_json, prev_hash, hash)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                seq,
+                event["ts"],
+                org_id,
+                request_id,
+                action,
+                actor,
+                _canonical(event),
+                prev_hash,
+                event_hash,
+            ),
+        )
         return event
 
     def events(self) -> Iterator[dict]:
         with self.store.connect() as conn:
-            rows = conn.execute(
-                "SELECT event_json FROM audit_events ORDER BY seq"
-            ).fetchall()
-        for row in rows:
-            yield json.loads(row["event_json"])
+            rows = conn.execute("SELECT event_json FROM audit_events ORDER BY seq")
+            for row in rows:
+                yield json.loads(row["event_json"])
 
     def verify_chain(self) -> dict:
         expected_prev = "0" * 64

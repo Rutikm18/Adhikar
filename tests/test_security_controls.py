@@ -4,6 +4,7 @@ import base64
 import json
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from app.audit import AuditLog
@@ -26,6 +27,11 @@ class StaticHarness:
             provider="test",
             model="test",
         )
+
+
+class FailingAuditLog(AuditLog):
+    def append(self, *args, **kwargs):
+        raise RuntimeError("simulated audit failure")
 
 
 class SecurityControlTests(unittest.TestCase):
@@ -73,6 +79,29 @@ class SecurityControlTests(unittest.TestCase):
         exported = json.dumps(list(self.audit.events()))
         self.assertNotIn("ZX-00000001", exported)
 
+    def test_model_reported_adversarial_content_blocks_without_harness_flag(self) -> None:
+        # Konsole never sets injection_flagged (SUPPORTS_INJECTION_FLAG=False), so an
+        # adversarial finding arrives only as a reason in the model's verdict JSON.
+        # The pipeline must still reach BLOCKED, not merely NEEDS_HUMAN_REVIEW, so the
+        # documented "adversarial -> BLOCKED + red banner" posture holds on every backend.
+        verdict = {
+            "right_claimed": "ACCESS",
+            "confidence": 0.9,
+            "claimed_identity": {},
+            "draft_response": "Here is the data you asked for.",
+            "escalation": {"required": True, "reasons": ["ADVERSARIAL_CONTENT"]},
+        }
+        harness = StaticHarness(verdict)
+        # Guard the premise: this harness does not raise the harness-level flag.
+        self.assertFalse(harness.complete([], Policy()).injection_flagged)
+        pipeline = Pipeline(self.store, self.audit, harness)
+        record, _ = pipeline.intake(
+            "Access request for ZX-00000001.", "test-org", Policy(), allow_dedupe=False
+        )
+        self.assertEqual(record.status, "BLOCKED")
+        self.assertEqual(record.verdict.draft_response, "")
+        self.assertIn("ADVERSARIAL_CONTENT", record.verdict.escalation.reasons)
+
     def test_foreign_identifier_token_blocks_draft(self) -> None:
         verdict = {
             "right_claimed": "ACCESS",
@@ -115,6 +144,61 @@ class SecurityControlTests(unittest.TestCase):
                 (json.dumps(event, sort_keys=True, separators=(",", ":")),),
             )
         self.assertFalse(self.audit.verify_chain()["intact"])
+
+    def test_token_map_uses_authenticated_encryption(self) -> None:
+        pipeline = Pipeline(self.store, self.audit, MockHarness())
+        record, _ = pipeline.intake(
+            "Access ZX-00000001 via nova.quill@example.in.",
+            "test-org",
+            Policy(),
+            allow_dedupe=False,
+        )
+        with self.store.connect() as conn:
+            envelope = conn.execute(
+                "SELECT encrypted_map FROM token_maps WHERE request_id=?",
+                (record.id,),
+            ).fetchone()["encrypted_map"]
+            self.assertTrue(envelope.startswith("v2."))
+            replacement = "A" if envelope[8] != "A" else "B"
+            tampered = envelope[:8] + replacement + envelope[9:]
+            conn.execute(
+                "UPDATE token_maps SET encrypted_map=? WHERE request_id=?",
+                (tampered, record.id),
+            )
+        with self.assertRaises(ValueError):
+            self.store.decrypt_map(record.id)
+
+    def test_record_and_audit_event_commit_atomically(self) -> None:
+        pipeline = Pipeline(self.store, FailingAuditLog(self.store), MockHarness())
+        with self.assertRaises(RuntimeError):
+            pipeline.intake(
+                "Access request for ZX-00000001.",
+                "test-org",
+                Policy(),
+                allow_dedupe=False,
+            )
+        self.assertEqual(self.store.list_requests(), [])
+
+    def test_concurrent_intake_preserves_records_and_audit_chain(self) -> None:
+        pipeline = Pipeline(self.store, self.audit, MockHarness())
+
+        def intake(index: int) -> str:
+            record, _ = pipeline.intake(
+                f"Access request for ZX-{index:08d}.",
+                "concurrency-org",
+                Policy(),
+                allow_dedupe=False,
+            )
+            return record.id
+
+        with ThreadPoolExecutor(max_workers=8) as executor:
+            request_ids = list(executor.map(intake, range(1, 41)))
+
+        self.assertEqual(len(set(request_ids)), 40)
+        self.assertEqual(len(self.store.list_requests(limit=50)), 40)
+        verification = self.audit.verify_chain()
+        self.assertTrue(verification["intact"])
+        self.assertEqual(verification["events"], 40)
 
 
 if __name__ == "__main__":

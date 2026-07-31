@@ -68,6 +68,10 @@ class Store:
                 CREATE INDEX IF NOT EXISTS idx_requests_org_hash_time
                     ON requests(org_id, raw_text_hash, received_at);
                 CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status);
+                CREATE INDEX IF NOT EXISTS idx_requests_received
+                    ON requests(received_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_requests_status_received
+                    ON requests(status, received_at DESC);
                 CREATE TABLE IF NOT EXISTS token_maps (
                     request_id TEXT PRIMARY KEY REFERENCES requests(id) ON DELETE CASCADE,
                     encrypted_map TEXT NOT NULL

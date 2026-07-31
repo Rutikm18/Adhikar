@@ -10,4 +10,7 @@ __pycache__/
 konsole_raw.json
 konsole_capabilities.md
 
+# Post-hackathon product working doc — not part of the submission
+plan.md
+pitch.md
 .gstack/
