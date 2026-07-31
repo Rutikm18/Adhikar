@@ -10,6 +10,14 @@ On macOS, open **Terminal**. Then move into the project directory:
 cd "/Users/rutikmangale/Documents/DRIVE F/Konsole/Adhikar"
 ```
 
+run
+
+```bash
+docker compose up --build 
+```
+
+OR
+
 Confirm that you are in the correct directory:
 
 ```bash
